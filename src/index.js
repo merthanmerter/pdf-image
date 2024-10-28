@@ -1,15 +1,9 @@
-import archiver from "archiver";
 import ejs from "ejs";
 import express from "express";
-import {
-  createWriteStream,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  unlinkSync,
-} from "fs";
+import { mkdirSync, readdirSync, rmSync, unlinkSync } from "fs";
 import multer from "multer";
 import { join } from "path";
+import { Worker } from "worker_threads";
 import { compressImages, convertPdfToImages } from "./lib/index.js";
 
 /**
@@ -18,6 +12,7 @@ import { compressImages, convertPdfToImages } from "./lib/index.js";
 const app = express();
 const upload = multer({ dest: "/tmp/uploads/" });
 const output = "/tmp/dist";
+const workerPath = join(process.cwd(), "src", "worker.js");
 
 /**
  * Configure view engine
@@ -63,20 +58,46 @@ app.post("/upload", upload.single("pdf"), async (req, res) => {
   }
 });
 
-/**
- * Download the converted images as a ZIP file
- * @param {Request} req - The request object
- * @param {Response} res - The response object
- * @returns {void}
- */
+// /**
+//  * Download the converted images as a ZIP file
+//  * @param {Request} req - The request object
+//  * @param {Response} res - The response object
+//  * @returns {void}
+//  */
+// app.get("/download-zip", (req, res) => {
+//   const outputPath = "/tmp/dist";
+//   const zipFilePath = "/tmp/dist.zip";
+
+//   const output = createWriteStream(zipFilePath);
+//   const archive = archiver("zip", { zlib: { level: 9 } });
+
+//   output.on("close", () => {
+//     res.download(zipFilePath, "images.zip", (err) => {
+//       if (err) {
+//         console.error("Error downloading zip file:", err);
+//       } else {
+//         unlinkSync(zipFilePath);
+//       }
+//     });
+//   });
+
+//   archive.on("error", (err) => {
+//     res.status(500).send({ error: `Error creating zip file: ${err.message}` });
+//   });
+
+//   archive.pipe(output);
+//   archive.directory(outputPath, false);
+//   archive.finalize();
+// });
+
+// Initiate zip file creation as a separate worker
 app.get("/download-zip", (req, res) => {
-  const outputPath = "/tmp/dist";
-  const zipFilePath = "/tmp/dist.zip";
+  console.log("worker is running");
+  const worker = new Worker(workerPath, {
+    workerData: { outputPath: "/tmp/dist", zipFilePath: "/tmp/dist.zip" },
+  });
 
-  const output = createWriteStream(zipFilePath);
-  const archive = archiver("zip", { zlib: { level: 9 } });
-
-  output.on("close", () => {
+  worker.on("message", (zipFilePath) => {
     res.download(zipFilePath, "images.zip", (err) => {
       if (err) {
         console.error("Error downloading zip file:", err);
@@ -86,13 +107,9 @@ app.get("/download-zip", (req, res) => {
     });
   });
 
-  archive.on("error", (err) => {
+  worker.on("error", (err) => {
     res.status(500).send({ error: `Error creating zip file: ${err.message}` });
   });
-
-  archive.pipe(output);
-  archive.directory(outputPath, false);
-  archive.finalize();
 });
 
 /**
