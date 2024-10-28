@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF to Image Converter</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body class="scrollbar">
+  <div class="container" x-data="upload">
+    <form class="upload-form" @submit.prevent="uploadFile">
+      <div class="input-group">
+        <label for="pdf">Select PDF file</label>
+        <input type="file" x-ref="pdfInput" name="pdf" id="pdf" accept="application/pdf" required />
+      </div>
+      <div class="input-group">
+        <label for="width">Width</label>
+        <input type="number" name="width" id="width" value="300" min="300" max="1000" required />
+      </div>
+      <div class="input-group">
+        <label for="format">Format</label>
+        <select name="format" id="format" required>
+          <option value="png">PNG</option>
+          <option value="jpeg">JPG</option>
+        </select>
+      </div>
+      <button type="submit" :disabled="isUploading">
+        <span x-text="isUploading ? 'Uploading...' : 'Convert PDF to Image'"></span>
+      </button>
+    </form>
+  </div>
+
+  <script>
+    function upload() {
+      return {
+        isUploading: false,
+
+        async uploadFile() {
+          const fileInput = this.$refs.pdfInput;
+          if (!fileInput.files.length) return;
+
+          const formData = new FormData();
+          formData.append("pdf", fileInput.files[0]);
+          formData.append("format", document.getElementById("format").value);
+          formData.append("width", document.getElementById("width").value);
+
+          if (!formData.get("pdf") || !formData.get("format") || !formData.get("width")) {
+            alert("Please fill in all fields.");
+            return;
+          }
+
+          this.isUploading = true;
+
+          try {
+            const response = await fetch("/upload", {
+              method: "POST",
+              body: formData,
+              headers: {
+                "X-Requested-With": "fetch",
+              },
+            });
+
+            if (!response.ok) throw new Error("Error during file upload.");
+
+            const text = await response.text();
+            document.body.innerHTML = text;
+          } catch (error) {
+            alert(error.message);
+          } finally {
+            this.isUploading = false;
+          }
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>
