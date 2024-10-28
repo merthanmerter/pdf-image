@@ -1,10 +1,9 @@
 import ejs from "ejs";
 import express from "express";
-import { mkdirSync, readdirSync, rmSync, unlinkSync } from "fs";
+import { mkdirSync, rmSync, unlinkSync } from "fs";
 import multer from "multer";
 import { join } from "path";
 import { Worker } from "worker_threads";
-import { compressImages, convertPdfToImages } from "./lib/index.js";
 
 /**
  * Create and configure the Express app
@@ -12,7 +11,6 @@ import { compressImages, convertPdfToImages } from "./lib/index.js";
 const app = express();
 const upload = multer({ dest: "/tmp/uploads/" });
 const output = "/tmp/dist";
-const workerPath = join(process.cwd(), "src", "worker.js");
 
 /**
  * Configure view engine
@@ -30,13 +28,7 @@ app.get("/", (req, res) => {
   res.render("index.html");
 });
 
-/**
- * Handle file upload
- * @param {Request} req - The request object
- * @param {Response} res - The response object
- * @returns {void}
- */
-app.post("/upload", upload.single("pdf"), async (req, res) => {
+app.post("/upload", upload.single("pdf"), (req, res) => {
   const path = req.file.path;
   const format = req.body.format;
   const width = parseInt(req.body.width);
@@ -44,55 +36,31 @@ app.post("/upload", upload.single("pdf"), async (req, res) => {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
 
-  try {
-    await convertPdfToImages(path, output, format);
+  const workerPath = join(process.cwd(), "src", "worker", "upload.js");
+  const worker = new Worker(workerPath, {
+    workerData: { path, format, width, output },
+  });
 
-    await compressImages(output, width);
+  worker.on("message", (images) => {
+    res.render("output.html", {
+      images: images.map((file) => `/dist/${file}`),
+    });
+  });
 
-    const images = readdirSync(output).map((file) => `/dist/${file}`);
-    res.render("output.html", { images });
-  } catch (error) {
-    res.status(500).send(`Conversion error: ${error}`);
-  } finally {
+  worker.on("error", (err) => {
+    res.status(500).send(`Conversion error: ${err.message}`);
+  });
+
+  worker.on("exit", (code) => {
     unlinkSync(path);
-  }
+    if (code !== 0) {
+      console.error(`Worker stopped with exit code ${code}`);
+    }
+  });
 });
 
-// /**
-//  * Download the converted images as a ZIP file
-//  * @param {Request} req - The request object
-//  * @param {Response} res - The response object
-//  * @returns {void}
-//  */
-// app.get("/download-zip", (req, res) => {
-//   const outputPath = "/tmp/dist";
-//   const zipFilePath = "/tmp/dist.zip";
-
-//   const output = createWriteStream(zipFilePath);
-//   const archive = archiver("zip", { zlib: { level: 9 } });
-
-//   output.on("close", () => {
-//     res.download(zipFilePath, "images.zip", (err) => {
-//       if (err) {
-//         console.error("Error downloading zip file:", err);
-//       } else {
-//         unlinkSync(zipFilePath);
-//       }
-//     });
-//   });
-
-//   archive.on("error", (err) => {
-//     res.status(500).send({ error: `Error creating zip file: ${err.message}` });
-//   });
-
-//   archive.pipe(output);
-//   archive.directory(outputPath, false);
-//   archive.finalize();
-// });
-
-// Initiate zip file creation as a separate worker
-app.get("/download-zip", (req, res) => {
-  console.log("worker is running");
+app.get("/download-zip", (_, res) => {
+  const workerPath = join(process.cwd(), "src", "worker", "download.js");
   const worker = new Worker(workerPath, {
     workerData: { outputPath: "/tmp/dist", zipFilePath: "/tmp/dist.zip" },
   });
