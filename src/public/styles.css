@@ -167,3 +167,20 @@ a:hover {
 .scrollbar::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-hover));
 }
+
+.github {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background-color: #333;
+  transition: background-color 0.3s;
+  text-decoration: none;
+}
+
+.github:hover {
+  background-color: #444;
+  text-decoration: none;
+}
