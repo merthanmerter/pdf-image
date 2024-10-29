@@ -36,7 +36,7 @@ app.post("/upload", upload.single("pdf"), (req, res) => {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
 
-  const workerPath = join(process.cwd(), "src", "worker", "upload.js");
+  const workerPath = join(process.cwd(), "src", "workers", "upload.js");
   const worker = new Worker(workerPath, {
     workerData: { path, format, width, output },
   });
@@ -60,7 +60,7 @@ app.post("/upload", upload.single("pdf"), (req, res) => {
 });
 
 app.get("/download-zip", (_, res) => {
-  const workerPath = join(process.cwd(), "src", "worker", "download.js");
+  const workerPath = join(process.cwd(), "src", "workers", "download.js");
   const worker = new Worker(workerPath, {
     workerData: { outputPath: "/tmp/dist", zipFilePath: "/tmp/dist.zip" },
   });

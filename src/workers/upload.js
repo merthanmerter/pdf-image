@@ -2,6 +2,7 @@ import { exec } from "child_process";
 import { readdirSync, renameSync, unlinkSync } from "fs";
 import { join } from "path";
 import sharp from "sharp";
+import { parentPort, workerData } from "worker_threads";
 
 /**
  * Convert PDF to images using pdftoppm
@@ -10,7 +11,7 @@ import sharp from "sharp";
  * @param {string} format - Format of the output image (png or jpg)
  * @returns {Promise<void>} - A promise that resolves when the conversion is complete
  */
-export async function convertPdfToImages(path, output, format) {
+async function convertPdfToImages(path, output, format) {
   return new Promise((resolve, reject) => {
     const outputPattern = join(output, "page");
     if (format !== "png" && format !== "jpeg") {
@@ -40,7 +41,7 @@ export async function convertPdfToImages(path, output, format) {
  * @param {string} path - Path where converted images are stored
  * @param {number} width - Width for the resized images (e.g., 300px for thumbnails)
  */
-export async function compressImages(path, width = 300) {
+async function compressImages(path, width = 300) {
   // Get all images in the path
   const images = readdirSync(path).filter((file) =>
     /\.(jpg|jpeg|png)$/i.test(file),
@@ -63,4 +64,16 @@ export async function compressImages(path, width = 300) {
       renameSync(tempFilePath, filePath);
     }),
   );
+}
+
+try {
+  const { path, format, width, output } = workerData;
+
+  await convertPdfToImages(path, output, format);
+  await compressImages(output, width);
+
+  const images = readdirSync(output);
+  parentPort.postMessage(images);
+} catch (error) {
+  parentPort.postMessage({ error: error.message });
 }
